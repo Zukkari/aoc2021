@@ -1,5 +1,6 @@
+open Base
 open Stdio
 
 let read name ~f =
   In_channel.with_file name ~f:(fun inc ->
-      In_channel.input_lines inc |> List.map f)
+      In_channel.input_lines inc |> List.map ~f:f)
