@@ -9,7 +9,9 @@ module BitCalculator : sig
 
   val touch : int list -> t -> t
 
-  val max : int -> t -> int
+  val max : t -> int -> int
+
+  val min : t -> int -> int
 end = struct
   type statistic = { zero : int; one : int }
 
@@ -45,10 +47,15 @@ end = struct
     in
     stats t 0 n
 
-  let max pos t =
+  let max t pos =
     match Map.find t pos with
-    | None -> 0
+    | None -> "No value at position " ^ Int.to_string pos |> failwith
     | Some { zero; one } -> if zero > one then 0 else 1
+
+  let min t pos =
+    match Map.find t pos with
+    | None -> "No value at position " ^ Int.to_string pos |> failwith
+    | Some { zero; one } -> if zero > one then 1 else 0
 end
 
 module Diagnostic : sig
@@ -60,8 +67,14 @@ module Diagnostic : sig
 
   val epsilon_rate : t -> t
 
+  val oxygen_gen_rating : t list -> t
+
+  val c02_scrubber_rating : t list -> t
+
   val to_int : t -> int
 end = struct
+  open BitCalculator
+
   type t = int list
 
   let of_string s =
@@ -72,17 +85,37 @@ end = struct
     let open BitCalculator in
     let stats = List.fold ~init:empty ~f:(fun x y -> touch y x) n in
 
-    List.init (List.hd_exn n |> List.length) ~f:(fun index -> max index stats)
+    List.init (List.hd_exn n |> List.length) ~f:(max stats)
 
-  let epsilon_rate n =
-    let reverse n =
-      let rec aux acc = function
-        | [] -> acc
-        | x :: xs -> aux ((if Int.equal x 1 then 0 else 1) :: acc) xs
-      in
-      aux [] n
+  let reverse n =
+    let rec aux acc = function
+      | [] -> acc
+      | x :: xs -> aux ((if Int.equal x 1 then 0 else 1) :: acc) xs
     in
-    reverse n |> List.rev
+    aux [] n |> List.rev
+
+  let epsilon_rate = reverse
+
+  let calc_rating ~f n =
+    let matches_bit bit pos n =
+      let filtered = List.filteri ~f:(fun i x -> i = pos && x = bit) n in
+      List.length filtered > 0
+    in
+
+    let rec aux pos = function
+      | [] -> failwith "Empty list"
+      | [ x ] -> x
+      | n ->
+          let stats = List.fold ~init:empty ~f:(fun x y -> touch y x) n in
+          let common = f stats pos in
+          let next = List.filter ~f:(matches_bit common pos) n in
+          aux (pos + 1) next
+    in
+    aux 0 n
+
+  let oxygen_gen_rating = calc_rating ~f:max
+
+  let c02_scrubber_rating = calc_rating ~f:min
 
   let to_int (n : int list) =
     List.fold ~init:"0b" ~f:(fun acc x -> acc ^ Int.to_string x) n
@@ -95,3 +128,4 @@ let solve gamma epsilon =
   let epsilon_rate = to_int epsilon in
 
   gamma_rate * epsilon_rate
+
