@@ -10,8 +10,6 @@ module Board : sig
   val touch : t -> int -> t
 
   val unmarked_sum : t -> int
-
-  val debug : t -> unit
 end = struct
   type slot = { value : int; marked : bool }
 
@@ -54,16 +52,6 @@ end = struct
     let touch_row n row = List.map ~f:(mark_slot n) row in
 
     List.map ~f:(touch_row n) board
-
-  let debug (board : t) =
-    let debug_row row =
-      let open Stdio in
-      let values = List.map ~f:(fun s -> Int.to_string s.value) row in
-
-      let s = "[" ^ String.concat ~sep:"," values ^ "]" in
-      Out_channel.printf "%s\n" s
-    in
-    List.iter ~f:debug_row board
 
   let rec unmarked_sum = function
     | [] -> 0
@@ -142,43 +130,25 @@ end = struct
             List.filter ~f:Board.won new_boards |> List.map ~f:(fun b -> (x, b))
           in
 
-          let lost_boards = List.filter ~f:(fun b -> not (Board.won b)) new_boards in
+          let lost_boards =
+            List.filter ~f:(fun b -> not (Board.won b)) new_boards
+          in
 
           find_last_win_acc lost_boards (List.append won_boards acc) xs
     in
     find_last_win_acc boards []
 
-  let play filename =
+  let play_internal filename ~f =
     let seq, board_inputs = Input.read filename in
     let boards = List.map ~f:Board.to_board board_inputs in
 
-    let num, board = find_win boards seq in
+    let num, board = f boards seq in
 
     let sum = Board.unmarked_sum board in
 
-    let _ =
-      let open Stdio in
-      Out_channel.printf "%d %d\n" num sum
-    in
-
-    let _ = Board.debug board in
-
     sum * num
 
-  let play2 filename =
-    let seq, board_inputs = Input.read filename in
-    let boards = List.map ~f:Board.to_board board_inputs in
+  let play = play_internal ~f:find_win
 
-    let num, board = find_last_win boards seq in
-
-    let sum = Board.unmarked_sum board in
-
-    let _ =
-      let open Stdio in
-      Out_channel.printf "%d %d\n" num sum
-    in
-
-    let _ = Board.debug board in
-
-    sum * num
+  let play2 = play_internal ~f:find_last_win
 end
