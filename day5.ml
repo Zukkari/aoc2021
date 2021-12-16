@@ -1,38 +1,5 @@
 open Base
 
-module Board : sig
-  type t
-
-  val empty : int -> t
-  val iterate : t -> (int * int) list -> t
-  val overlap : t -> int
-  val show : t -> string
-end = struct
-  type t = (int * int * int) list [@@deriving show]
-
-  let empty size =
-    let range = List.init size ~f:(fun x -> x + 1) in
-    List.cartesian_product (0 :: range) (0 :: range)
-    |> List.map ~f:(fun (x, y) -> (x, y, 0))
-
-  let rec apply p =
-    let rec aux (x, y) acc = function
-      | [] -> acc
-      | ((x1, y1, z) as p) :: xs ->
-          if x = x1 && y = y1 then (acc @ [ (x1, y1, z + 1) ]) @ xs
-          else aux (x, y) (acc @ [ p ]) xs
-    in
-    aux p []
-
-  let rec iterate board = function
-    | [] -> board
-    | x :: xs -> iterate (apply x board) xs
-
-  let rec overlap = function
-    | [] -> 0
-    | (_, _, z) :: xs -> if z >= 2 then 1 + overlap xs else overlap xs
-end
-
 module Bresenham : sig
   val plotLine : int * int -> int * int -> (int * int) list
 end = struct
