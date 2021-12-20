@@ -1,5 +1,33 @@
 open Base
 
+module Permitation : sig
+  val permute : 'a list -> 'a list list
+end = struct
+  let rec permutations l =
+    let n = List.length l in
+    if n = 1 then [ l ]
+    else
+      let rec sub e = function
+        | [] -> failwith "sub"
+        | h :: t -> if h = e then t else h :: sub e t
+      in
+      let rec aux k =
+        let e = List.nth_exn l k in
+        let subperms = permutations (sub e l) in
+        let t = List.map ~f:(fun a -> e :: a) subperms in
+        if k < n - 1 then List.rev_append t (aux (k + 1)) else t
+      in
+      aux 0
+
+  let permute lst =
+    let n = List.length lst in
+    let sized = List.init n ~f:(fun x -> x + 1) in
+    let permutations = permutations sized in
+    List.map
+      ~f:(fun perm -> List.map ~f:(fun i -> List.nth_exn lst (i - 1)) perm)
+      permutations
+end
+
 module Solver = struct
   type t = { input : string list; output : string list } [@@deriving show]
 
@@ -28,103 +56,37 @@ end
 module Display = struct
   open Solver
 
-  type pixel = { mapping : char } [@@deriving show]
-
   type display = {
-    top_left : pixel;
-    top : pixel;
-    top_right : pixel;
-    middle : pixel;
-    bot_left : pixel;
-    bot : pixel;
-    bot_right : pixel;
+    top_left : string;
+    top : string;
+    top_right : string;
+    middle : string;
+    bot_left : string;
+    bot : string;
+    bot_right : string;
   }
   [@@deriving show]
 
-  let rec find_digit len = function
-    | [] -> "No number present" |> failwith
-    | x :: xs -> if String.length x = len then x else find_digit len xs
+  let to_display = function
+    | [ a; b; c; d; e; f; g ] ->
+        {
+          top_left = a;
+          top = b;
+          top_right = c;
+          middle = d;
+          bot_left = e;
+          bot = f;
+          bot_right = g;
+        }
+    | _ -> failwith "to_display"
 
-  let diff x1 x2 =
-    List.filter ~f:(fun x -> not (List.mem ~equal:Char.equal x2 x)) x1
+  let decode { top_left; top; top_right; middle; bot_left; bot; bot_right } =
+    String.concat [ top_left; top; top_right; middle; bot_left; bot; bot_right ]
 
-  type mappings = char list [@@deriving show]
-
-  let decode input overlap =
-    match
-      List.map ~f:(fun code -> diff (String.to_list code) overlap) input
-      |> List.filter ~f:(fun code -> List.length code = 1)
-      |> List.concat
-      |> Set.of_list (module Char)
-      |> Set.to_list
-    with
-    | [ x ] -> x
-    | other ->
-        "More than 1 match: " ^ show_mappings other ^ " in input "
-        ^ String.concat ~sep:";" input
-        |> failwith
-
-  let rev_decode input overlap = decode overlap input
-
-  let to_pixel input overlap =
-    let mapping = decode input overlap in
-    { mapping }
-
-  let display { input; _ } =
-    let one = find_digit 2 input in
-    let seven = find_digit 3 input in
-    let four = find_digit 4 input in
-    let eight = find_digit 7 input in
-
-    let known = [ one; seven; four; eight ] in
-
-    let not_decoded =
-      List.filter ~f:(fun x -> not (List.mem ~equal:String.equal known x)) input
-    in
-
-    let top = to_pixel [ seven ] (String.to_list one) in
-
-    let bot = top.mapping :: String.to_list four |> to_pixel not_decoded in
-
-    let bot_left =
-      top.mapping :: bot.mapping :: String.to_list four |> to_pixel [ eight ]
-    in
-
-    let middle =
-      top.mapping :: bot_left.mapping :: bot.mapping :: String.to_list seven
-      |> to_pixel not_decoded
-    in
-
-    let top_left =
-      top.mapping :: bot_left.mapping :: bot.mapping :: middle.mapping
-      :: String.to_list seven
-      |> to_pixel not_decoded
-    in
-
-    let bot_right =
-      [
-        top.mapping;
-        bot_left.mapping;
-        bot.mapping;
-        middle.mapping;
-        top_left.mapping;
-      ]
-      |> to_pixel not_decoded
-    in
-
-    let top_right =
-      [
-        top.mapping;
-        bot_left.mapping;
-        bot.mapping;
-        middle.mapping;
-        top_left.mapping;
-        bot_right.mapping;
-      ]
-      |> to_pixel [ eight ]
-    in
-
-    { top_left; top; top_right; middle; bot_left; bot; bot_right }
+  let displays =
+    let variants = [ "a"; "b"; "c"; "d"; "e"; "f"; "g" ] in
+    let permutations = Permitation.permute variants in
+    List.map ~f:to_display permutations
 end
 
 module Decoder = struct
@@ -142,7 +104,7 @@ module Decoder = struct
 
   type position_list = position list [@@deriving show]
 
-  let pos code { top_left; top; top_right; middle; bot_left; bot; bot_right } =
+  let fit code { top_left; top; top_right; middle; bot_left; bot; bot_right } =
     let mappings =
       [
         (top_left, TopLeft);
@@ -157,27 +119,47 @@ module Decoder = struct
     let code_list = String.to_list code in
 
     List.filter
-      ~f:(fun (code, _) -> List.mem ~equal:Char.equal code_list code.mapping)
+      ~f:(fun (code, _) ->
+        List.mem ~equal:Char.equal code_list (Char.of_string code))
       mappings
     |> List.map ~f:(fun (_, m) -> m)
 
   let decode_pos = function
-    | [ TopRight; BottomRight ] -> "1"
-    | [ Top; TopRight; Middle; BottomLeft; Bottom ] -> "2"
-    | [ Top; TopRight; Middle; Bottom; BottomRight ] -> "3"
-    | [ TopLeft; TopRight; Middle; BottomRight ] -> "4"
-    | [ TopLeft; Top; Middle; Bottom; BottomRight ] -> "5"
-    | [ TopLeft; Top; Middle; BottomLeft; Bottom; BottomRight ] -> "6"
-    | [ Top; TopRight; BottomRight ] -> "7"
-    | [ TopLeft; Top; TopRight; Middle; BottomLeft; Bottom; BottomRight ] -> "8"
-    | [ TopLeft; Top; TopRight; Middle; Bottom; BottomRight ] -> "9"
-    | x -> "Invalid digit: " ^ show_position_list x |> failwith
+    | [ TopRight; BottomRight ] -> Some "1"
+    | [ Top; TopRight; Middle; BottomLeft; Bottom ] -> Some "2"
+    | [ Top; TopRight; Middle; Bottom; BottomRight ] -> Some "3"
+    | [ TopLeft; TopRight; Middle; BottomRight ] -> Some "4"
+    | [ TopLeft; Top; Middle; Bottom; BottomRight ] -> Some "5"
+    | [ TopLeft; Top; Middle; BottomLeft; Bottom; BottomRight ] -> Some "6"
+    | [ Top; TopRight; BottomRight ] -> Some "7"
+    | [ TopLeft; Top; TopRight; Middle; BottomLeft; Bottom; BottomRight ] ->
+        Some "8"
+    | [ TopLeft; Top; TopRight; Middle; Bottom; BottomRight ] -> Some "9"
+    | [ TopLeft; Top; TopRight; BottomLeft; Bottom; BottomRight ] -> Some "0"
+    | _ -> None
 
-  let decode display code = pos code display |> decode_pos
+  let decode display code = fit code display |> decode_pos
+
+  type s_opt = string option list [@@deriving show]
+  type s_list = string list [@@deriving show]
+
+  let find_display displays input =
+    let fit acc display =
+      match acc with
+      | Some d -> Some d
+      | None ->
+          let all_fitted =
+            List.map ~f:(fun code -> decode display code) input
+          in
+
+          if List.for_all ~f:Option.is_some all_fitted then Some display
+          else None
+    in
+
+    List.fold ~init:None ~f:fit displays
 end
 
-module Solution = struct
-  open Solver
+module Bruteforce = struct
   open Display
   open Decoder
 
@@ -188,12 +170,19 @@ module Solution = struct
           In_channel.input_lines inc |> List.map ~f:Solver.of_string)
     in
 
-    let solve_display ({ output; _ } as s) =
-      let display = display s in
-
-      List.map ~f:(decode display) output |> String.concat
+    let solve display ~input =
+      match display with
+      | None -> failwith "solve"
+      | Some d ->
+          List.map ~f:(fun i -> Option.value_exn (decode d i)) input
+          |> String.concat |> Int.of_string
     in
 
-    List.map ~f:solve_display inputs
-    |> List.map ~f:Int.of_string |> List.fold ~init:0 ~f:( + )
+    let displays = Display.displays in
+
+    List.map
+      ~f:(fun { input; output } ->
+        find_display displays input |> solve ~input:output)
+      inputs
+    |> List.fold ~init:0 ~f:( + )
 end
