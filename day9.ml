@@ -8,6 +8,7 @@ let find matrix ri ci =
   Some point
 
 (* Part 1 *)
+
 let is_low_point matrix ri pi p =
   let neighbours =
     [
@@ -26,13 +27,46 @@ let find_low_points lst =
 
 (* Part 2 *)
 
-let basin_size matrix ri pi p = 0
+let directions =
+  [
+    (fun x y -> (x - 1, y));
+    (fun x y -> (x + 1, y));
+    (fun x y -> (x, y - 1));
+    (fun x y -> (x, y + 1));
+  ]
+
+let conquer lst ri pi =
+  let is_lower_point (a, b) f =
+    let open Option.Let_syntax in
+    let x, y = f a b in
+    let%bind existing_point = find lst a b in
+    let%bind point = find lst x y in
+    if point <> 9 && existing_point < point then Some (x, y) else None
+  in
+
+  let rec aux visited count = function
+    | [] -> count
+    | ((a, b) as p) :: xs -> (
+        match List.find ~f:(fun (x, y) -> x = a && y = b) visited with
+        | Some _ -> aux visited count xs
+        | None ->
+            let points =
+              List.map ~f:(is_lower_point p) directions
+              |> List.filter_map ~f:(fun x -> x)
+            in
+            aux (p :: visited) (count + 1) (xs @ points))
+  in
+  aux [] 0 [ (ri, pi) ]
+
+let basin_size lst ri pi p =
+  if is_low_point lst ri pi p then conquer lst ri pi else 0
 
 let find_basins lst =
   List.mapi ~f:(fun ri row -> List.mapi ~f:(basin_size lst ri) row) lst
   |> List.concat
 
 (* IO *)
+
 module IO = struct
   let of_string line =
     String.to_list line
@@ -63,6 +97,13 @@ let find_max_n n acc x =
 let solve_p2 ~file =
   let matrix = IO.read ~file in
 
-  let basins = find_basins matrix |> List.fold ~init:[] ~f:(find_max_n 3) in
+  let basins = find_basins matrix in
 
-  List.fold ~init:1 ~f:( * ) basins
+  let sorted_basins =
+    basins
+    |> List.filter ~f:(fun x -> x <> 0)
+    |> List.sort ~compare:Int.compare
+    |> List.rev
+  in
+
+  List.take sorted_basins 3 |> List.fold ~init:1 ~f:( * )
