@@ -18,7 +18,9 @@ let to_octopus n = { energy_level = n; state = Charging }
 
 let grid_size = 10
 
-let pos row col = (row * grid_size) + col
+let pos row col =
+  if col < 0 || row < 0 || col > 9 || row > 9 then None
+  else Some ((row * grid_size) + col)
 
 let of_index i =
   let row = i / grid_size in
@@ -48,12 +50,15 @@ let flash seq =
       exp row col
     in
 
-    List.map ~f:to_pos seq |> List.concat |> List.map ~f:(fun (r, c) -> pos r c)
+    List.map ~f:to_pos seq |> List.concat
+    |> List.map ~f:(fun (r, c) -> pos r c)
+    |> List.filter_map ~f:(fun x -> x)
   in
 
   let adjust = function
-    | { energy_level; state = Charging; _ } when energy_level > 9 ->
-        { energy_level; state = Flashed }
+    | { state = Charging; energy_level; _ } ->
+        if energy_level + 1 > 9 then { energy_level = 10; state = Flashed }
+        else { energy_level = energy_level + 1; state = Charging }
     | other -> other
   in
 
@@ -65,23 +70,27 @@ let flash seq =
     |> List.filter_map ~f:(fun x -> x)
   in
 
-  let rec aux seq visited = function
+  let flashed_positions s =
+    List.mapi ~f:(fun i oct -> if has_flashed oct then Some i else None) s
+    |> List.filter_map ~f:(fun x -> x)
+  in
+
+  let rec aux seq prev_flash = function
     | [] -> seq
     | x :: xs ->
         let new_seq =
           List.mapi ~f:(fun i oct -> if x = i then adjust oct else oct) seq
         in
 
-        let checked = x :: visited in
-
-        let queued = checked @ xs in
-
-        let flashed =
-          flash_pos new_seq |> expand
-          |> List.filter ~f:(fun p -> not (List.mem ~equal:Int.equal queued p))
+        let new_flash =
+          flashed_positions new_seq
+          |> List.filter ~f:(fun p ->
+                 not (List.mem ~equal:Int.equal prev_flash p))
         in
 
-        aux new_seq checked (xs @ flashed)
+        let new_to_check = new_flash |> expand in
+
+        aux new_seq (prev_flash @ new_flash) (xs @ new_to_check)
   in
 
   aux seq [] (flash_pos seq)
@@ -94,18 +103,28 @@ let reset =
   List.map ~f:reset_octopus
 
 let rec iterate seq = function
-  | 0 -> 0
+  | 0 -> count seq
   | n ->
       let incremented = increment seq in
       let flashed = flash incremented in
       let count = count flashed in
 
-      let () =
-        let open Stdio in
-        Out_channel.print_endline (show_octopus_list flashed)
-      in
-
       count + iterate (reset flashed) (n - 1)
+
+let all_flash =
+  let rec aux n seq =
+    let all_flashed = List.for_all ~f:has_flashed seq in
+
+    if all_flashed then n
+    else
+      let reseted = reset seq in
+      let incremented = increment reseted in
+      let flashed = flash incremented in
+
+      aux (n + 1) flashed
+  in
+
+  aux 0
 
 module IO = struct
   let read_input ~file =
